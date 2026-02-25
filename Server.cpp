@@ -6,7 +6,7 @@
 /*   By: homohame <homohame@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/04 04:50:15 by homohame          #+#    #+#             */
-/*   Updated: 2026/02/06 07:45:54 by homohame         ###   ########.fr       */
+/*   Updated: 2026/02/21 13:21:09 by homohame         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -147,7 +147,7 @@ std::vector<std::string> split(std::string buffer)
 		tokens.push_back(buffer);
 	return tokens;
 }
-
+#define RPL_WELCOME(client) ":localhost 001 " + std::string(client) + " :Bievenue sur le serv'bg !\r\n"
 void Server::handleMessage(int i)
 {
 	int rc, close_conn = 0;
@@ -177,6 +177,11 @@ void Server::handleMessage(int i)
 	//check si l utilisateur existe
 	for (size_t j = 0; j < commands.size(); j++)
 	{
+		if (commands[j].find("USER") == 0)
+		{
+			std::string response = RPL_WELCOME("houss");
+			send(fds[i].fd, response.c_str(), response.length(), 0);
+		}
 		if (commands[j].find("PING") == 0)
 		{
 			std::string token = commands[j].substr(5); // On prend tout après "PING "

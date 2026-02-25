@@ -6,7 +6,7 @@
 /*   By: homohame <homohame@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/06 07:19:13 by homohame          #+#    #+#             */
-/*   Updated: 2026/02/07 13:16:44 by homohame         ###   ########.fr       */
+/*   Updated: 2026/02/25 10:48:20 by homohame         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -28,7 +28,7 @@ private:
 	void	cmdUser(User user);
 	void	cmdPong(User user);
 public:
-	Commands(std::string command);
+	Commands(char *command);
 	~Commands();
 };
 

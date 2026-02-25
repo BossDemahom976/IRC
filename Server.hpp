@@ -6,7 +6,7 @@
 /*   By: homohame <homohame@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/04 03:58:02 by homohame          #+#    #+#             */
-/*   Updated: 2026/02/06 07:48:50 by homohame         ###   ########.fr       */
+/*   Updated: 2026/02/21 13:20:08 by homohame         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -28,9 +28,11 @@
 # include <vector>
 # include <map>
 # include "User.hpp"
-# include "Commands.hpp"
+//# include "Commands.hpp"
 
+#define RPL_WELCOME(client) ":localhost 001 " + std::string(client) + " :Bievenue sur le serv'bg !\r\n"
 //typedef int (Server::*Method) ();
+class User;
 
 class Server
 {

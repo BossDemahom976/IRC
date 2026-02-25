@@ -6,11 +6,12 @@
 /*   By: homohame <homohame@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/06 05:35:35 by homohame          #+#    #+#             */
-/*   Updated: 2026/02/06 07:59:22 by homohame         ###   ########.fr       */
+/*   Updated: 2026/02/21 13:07:26 by homohame         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "User.hpp"
+#define RPL_WELCOME(client) ":localhost 001 " + std::string(client) + " :Bievenue sur le serv'bg !\r\n"
 
 User::User(int fd)
 {
