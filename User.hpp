@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   User.hpp                                           :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: homohame <homohame@student.42.fr>          +#+  +:+       +#+        */
+/*   By: ibtihal <ibtihal@student.42.fr>            +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/06 05:09:19 by homohame          #+#    #+#             */
-/*   Updated: 2026/02/21 13:06:58 by homohame         ###   ########.fr       */
+/*   Updated: 2026/04/29 16:30:16 by ibtihal          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,8 +14,11 @@
 # define USER_HPP
 
 # include "Server.hpp"
-//# include "Commands.hpp"
+# include "Command.hpp"
 # include <string>
+# include "Channel.hpp"
+
+class Channel;
 
 class User
 {
@@ -23,13 +26,26 @@ class User
 		int			fd;
 		std::string	nick;
 		std::string	username;
-		bool		registered;
+		std::vector<Channel *> _channels;
+		std::string realname;
 	public:
+		bool oper;
 		User(int fd);
 		~User();
-		void	setNick(std::string nick);
-		void	setUsername(std::string username);
-		void	welcome();
+		void sendAllChannels(std::string);
+		void	setNick(std::string);
+		std::string getNick() const;
+		std::string getUsername() const;
+		std::string getRealName() const;
+		void setRealName(std::string);
+		void	setUsername(std::string);
+		bool	registered;
+		int		getFd() const;
+		std::string in_pwd;
+		std::vector<Channel *> getChannels() const;
+		void clearChannels();
+		void addChannel(Channel &);
+		void removeChannel(Channel &);
 };
 
 #endif

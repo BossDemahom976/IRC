@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: homohame <homohame@student.42.fr>          +#+  +:+       +#+        */
+/*   By: ibtihal <ibtihal@student.42.fr>            +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/04 04:50:15 by homohame          #+#    #+#             */
-/*   Updated: 2026/02/21 13:21:09 by homohame         ###   ########.fr       */
+/*   Updated: 2026/04/29 15:56:47 by ibtihal          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,12 +17,14 @@
 //	// TODO: insert return statement here
 //}
 
+Server *Server::_server = NULL;
+
 Server::Server(int port, std::string &password)
 {
 	this->port = port;
 	this->password = password;
-	//INITIALISATION DE MAP POUR COMMANDES A FAIRE 
-	//TODO
+	time(&creation_time);
+	closed = false;
 }
 
 Server::~Server()
@@ -33,11 +35,11 @@ void Server::initServer()
 {
 	int on = 1;
 
-	serv_socket = socket(AF_INET, SOCK_STREAM, 0);
+	serv_socket = socket(PF_INET, SOCK_STREAM, 0); //AF_INET : IPV4 SOCK_STREAM : TCP
 	if (serv_socket < 0)
 		exit (EXIT_FAILURE);
 
-	if (setsockopt(serv_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&on, sizeof(int)) < 0)
+	if (setsockopt(serv_socket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) //set_SocketOPTION : set Socket (SOL_SOCKET), pour le permettre de reutiliser les memes adresses
 	{
 		std::cerr << "setsockopt() failed" << std::endl;
 		close(serv_socket);
@@ -47,17 +49,17 @@ void Server::initServer()
 	fcntl(serv_socket, F_SETFL, O_NONBLOCK);
 
 	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = INADDR_ANY;
+	addr.sin_family = AF_INET; //IPv4
+	addr.sin_addr.s_addr = INADDR_ANY; //binds socket to all interfaces
 	addr.sin_port = htons(port);
 
 	if (bind(serv_socket, (struct sockaddr *)&addr, sizeof(addr)) < 0)
 	{
-		std::cerr << "bind() failed" << std::endl;
+		perror("bind failed");
 		close(serv_socket);
 		exit (EXIT_FAILURE);
 	}
-	
+
 	if (listen(serv_socket, 32) < 0)
 	{
 		std::cerr << "Failed to listen on socket. errno: " << errno << std::endl;
@@ -74,34 +76,97 @@ void Server::initServer()
 void Server::serverLooping()
 {
 	std::size_t i = 0;
-	while (true)
+	while (poll(fds.data(), fds.size(), -1) >= 0 && !closed)
 	{
-		if (poll(fds.data(), fds.size(), -1) < 0)
-			break ;
 		for (i = 0; i < fds.size(); i++)
 		{
-			if(fds[i].revents == 0) 
+			if(fds[i].revents == 0)
 				continue ;
-			if (fds[i].revents != POLLIN)
+			if (fds[i].revents != POLLIN) //POLLIN : there is data to read
 			{
 				handleDisconnection(i);
 				--i;
 				continue ;
 			}
-			if (fds[i].fd == serv_socket)
+			if (fds[i].fd == serv_socket) // quand un client se connecte pour la premiere fois son fd est égal au socket du serveur
 				handleConnection();
 			else
-				handleMessage(i); //TODO deconnexion
+			{
+				char buffer[512];
+				int n = recv(fds[i].fd, buffer, sizeof(buffer) - 1, 0);
+				if (n < 0) {
+					if (errno == EAGAIN || errno == EWOULDBLOCK) {
+						continue;
+					}
+					else {
+						perror("Recv failed\n");
+						closeServer(0);
+						return ;
+					}
+				}
+				else if (n == 0) { // n == 0 => fd closed (shutdown)
+					handleDisconnection(i);
+					i--;
+				}
+				else {
+					buffer[n] = 0;
+					buffers[i - 1].append(buffer);
+					while (buffers[i - 1].find("\r\n") != std::string::npos && !closed)
+						handleMessage(i, buffers[i - 1]);
+				}
+			}
 		}
 	}
 }
 
+void Server::closeServer() {
+	for (int i = fds.size() - 1 ; i != 0 ; i--) {
+		handleDisconnection(i);
+	}
+	fds.clear();
+	buffers.clear();
+	_channels.clear();
+	close(serv_socket);
+	std::cout << "Server Closed\n";
+}
+
 void Server::handleDisconnection(int i)
 {
-	std::cout << "Déconnexion fd: " << fds[i].fd << std::endl;
+	std::cout << "Déconnexion fd: " << fds[i].fd << " I " << i << std::endl;
 	close(fds[i].fd);
 	fds.erase(fds.begin() + i);
+	std::vector<Channel *> c = (users.begin() + i - 1)->getChannels();
+	for (size_t j = 0; j < c.size(); j++) {
+		std::cout << "CHAN NAME " << c[j]->getName() << std::endl;
+		std::cout << "FD " << (users.begin() + i - 1)->getFd() << std::endl;
+		c[j]->removeUser(users[j]);
+	}
+	users.erase(users.begin() + i - 1);
 }
+
+void	Server::handleDisconnectionFD(int fd) {
+	std::cout << "Déconnexion fd: " << fd << std::endl;
+	size_t i;
+	std::cout << "USERS SIZE " << users.size() << std::endl;
+	std::cout << "FDS SIZE " << fds.size() << std::endl;
+	for (i = 0; i < fds.size(); i++) {
+		if (fds[i].fd == fd)
+			break;
+	}
+	if (i == fds.size()) {
+		std::cerr << "WRONG FD" << std::endl;
+		return;
+	}
+	std::cout << "I " << i << std::endl;
+	close(fd);
+	fds.erase(fds.begin() + i);
+	std::vector<Channel *> c = (users.begin() + i - 1)->getChannels();
+	for (size_t j = 0; j < c.size(); j++) {
+		c[j]->removeUser(*(users.begin() + i - 1));
+	}
+	users.erase(users.begin() + (i - 1));
+}
+
 
 void Server::handleConnection()
 {
@@ -125,69 +190,138 @@ void Server::handleConnection()
 		pfd.events = POLLIN;
 		pfd.revents = 0;
 		fds.push_back(pfd);
+		buffers.push_back("");
 		User user(new_socket);
-		users.push_back(user); // FAIRE UN addUser pour verifier si le user  existe deja
+		user.registered = false;
+		users.push_back(user);
+		std::cout << "POST LOG USERS SIZE " << users.size() << std::endl;
 	} while (new_socket != -1);
 }
 
-std::vector<std::string> split(std::string buffer)
-{
-	std::vector<std::string> tokens;
-	size_t pos= 0;
-	std::string token;
+void	Server::registerUser(User &u, struct pollfd fd) {
+	char buffer[512];
 
-	while ((pos = buffer.find("\r\n")) != std::string::npos)
-	{
-		token = buffer.substr(0, pos);
-		if (!token.empty())
-			tokens.push_back(token);
-		buffer.erase(0, pos + 2);
-	}
-	if (!buffer.empty())
-		tokens.push_back(buffer);
-	return tokens;
+	int r = recv(u.getFd(), buffer, sizeof(buffer) - 1, 0);
+	buffer[r] = 0;
+	(void) fd;
+	std::string s(buffer);
+	std::cout << s << std::endl;
 }
-#define RPL_WELCOME(client) ":localhost 001 " + std::string(client) + " :Bievenue sur le serv'bg !\r\n"
-void Server::handleMessage(int i)
+
+
+std::string firstword(std::string &s, std::string &params) {
+	if (s == "\r\n") {
+		s.erase();
+		return ("");
+	}
+	std::string word;
+	size_t idx = s.find(' ');
+	if (idx == std::string::npos) {
+		std::string news = s;
+		news.resize(news.length() - 2);
+		s.erase();
+		return (news);
+	}
+	word = s.substr(0,idx);
+	s.erase(0, idx + 1);
+	size_t idx2 = s.find("\r\n");
+	params = s.substr(0, idx2);
+	s.erase(0, idx2 + 2); // 2 => "\r\n"
+	return (word);
+}
+
+int Server::handleMessage(int i, std::string &msg)
 {
-	int rc, close_conn = 0;
-	char buffer[1024];
-	//on recoit un msg du client
-	rc = recv(fds[i].fd, buffer, sizeof(buffer) - 1, 0);
-	if (rc < 0)
-	{
-		if (errno != EWOULDBLOCK)
-		{
-			std::cerr << " recv() faild" << std::endl;
-			close_conn = 1;
-		}
-		return ;
+	(void)i;
+	std::string params("");
+	std::string cmd = firstword(msg, params);
+	if (cmd.empty())
+		return (1);
+	bool isUser = true;
+	User &u = getUser(fds[i].fd, &isUser);
+	if (!isUser) {
+		std::cerr << "Error : failing to find User who used command " << cmd << "\n";
+		return (0);
 	}
-	if (rc == 0)
-	{
-		std::cout << "Connection closed" << std::endl;
-		close_conn = 1;
-		return ;
+	Command command(cmd, params, u, *this);
+	command.processCmd();
+	return (1);
+}
+
+User &Server::getUser(int fd, bool *isUser) {
+	for (std::deque<User>::iterator i = users.begin(); i < users.end(); i++) {
+		if ((*i).getFd() == fd)
+			return (*i);
 	}
-	//ajout de \0 a la fin du buffer
-	buffer[rc] = '\0';
-	std::cout << buffer << std::endl;
-	std::string received(buffer);
-	std::vector<std::string> commands = split(received);
-	//check si l utilisateur existe
-	for (size_t j = 0; j < commands.size(); j++)
-	{
-		if (commands[j].find("USER") == 0)
-		{
-			std::string response = RPL_WELCOME("houss");
-			send(fds[i].fd, response.c_str(), response.length(), 0);
+	std::cout << "USER DOESNT EXIST ?\n";
+	*isUser = 0;
+	return (*users.begin());
+}
+
+std::string Server::getPassword() {
+	return (password);
+}
+
+std::deque<User>& Server::getAllusers() {
+	return (users);
+}
+
+void	answerto(std::string msg, int fd) {
+	std::cout << "MSG SENT " << msg << "\n";
+	std::cout << "NB SENT " << send(fd, msg.c_str(), msg.length(), 0) << "\n";
+}
+
+time_t Server::getCreation_time() {
+	return(creation_time);
+}
+
+User	&Server::getUser(std::string nick, bool& isUser) {
+	int i = 0;
+	for (std::deque<User>::iterator it = users.begin(); it != users.end(); it++) {
+		if (it->getNick() == nick) {
+			isUser = true;
+			return (*it);
 		}
-		if (commands[j].find("PING") == 0)
-		{
-			std::string token = commands[j].substr(5); // On prend tout après "PING "
-			std::string response = "PONG " + token + "\r\n";
-			send(fds[i].fd, response.c_str(), response.length(), 0);
-			std::cout << "Réponse au PING envoyée.\n" << std::endl;
+		i++;
+	}
+	isUser = false;
+	return (*users.begin());
+}
+
+void Server::closeServer(int sig) {
+	(void) sig;
+	if (_server && !(_server->closed)) {
+		_server->closeServer();
+	}
+	_server->closed = true;
+	return ;
+}
+
+std::deque<Channel> Server::getChannels() const {
+	return (_channels);
+}
+
+Channel *Server::findChannel(std::string s) {
+	for (std::deque<Channel>::iterator it = _channels.begin() ; it != _channels.end() ; it++) {
+		if ((it)->getName() == s)
+			return (&(*it));
+	}
+	return (0);
+}
+
+void Server::addChannel(Channel &chan) {
+	std::cout << "USER " << chan.getUser(0)->getNick() << " created " << chan.getName() << std::endl;
+	_channels.push_back(chan);
+	(_channels.begin())->getName();
+}
+
+bool	checkValid(std::string s) {
+	if (*(s.begin()) == '#' || *(s.begin()) == ':')
+		return false;
+	for (std::string::iterator it = s.begin(); it != s.end(); it++) {
+		if (!isprint(*it) || *it == ' ' || *it == ',' || *it == '*' || *it == '?' || *it == '!' || *it == '@' || *it == '.') {
+			return false;
 		}
 	}
+	return true;
 }
